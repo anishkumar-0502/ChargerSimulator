@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulator</title>
+</head>
+<body>
+    <h1>Charger Simulator</h1>
+    <label for="chargerId">Charger ID:</label>
+    <input type="text" id="chargerId">
+    <button onclick="connect()">Connect</button>
+    <button onclick="disconnect()">Disconnect</button><br><br>
+    <button onclick="sendBootMessage()">Send Boot Message</button>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.0/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>

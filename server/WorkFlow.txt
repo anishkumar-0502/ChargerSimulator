@@ -1,0 +1,156 @@
+const WebSocket = require('ws');
+
+let otherServerWebSocket;
+let bootNotificationData;
+let heartbeatInterval;
+let heartbeatSent = false; // Flag to track if a heartbeat has been sent
+let ChargerID; // Declare ChargerID globally
+let isConnected = false; // Flag to track the WebSocket connection status
+
+// Map to store WebSocket connections and associated client information
+const clients = new Map();
+
+// Function to find WebSocket connection based on ChargerID
+function findWebSocketByChargerId(chargerId) {
+    return clients.get(chargerId) || null;
+}
+
+// Function to send the next data
+function sendNextData() {
+    if (isConnected) {
+        const StatusNotification = [2, "a6gs8797ewYM06", "StatusNotification", {
+            "connectorId": 1,
+            "errorCode": "NoError",
+            "info": "Working well",
+            "status": "Preparing",
+            "timestamp": "2024-02-06T06:51:54Z",
+            "vendorId": "Outdid Tech",
+            "vendorErrorCode": "200"
+        }];
+        console.log('Sending StatusNotification data...', StatusNotification);
+        otherServerWebSocket.send(JSON.stringify(StatusNotification));
+    }
+}
+
+// Function to send a Heartbeat
+function sendHeartbeat() {
+    if (isConnected) {
+        const Heartbeat = [2, "a6gs8797ewYM03", "Heartbeat", {}];
+        console.log('Sending Heartbeat data...', Heartbeat);
+        otherServerWebSocket.send(JSON.stringify(Heartbeat));
+    }
+}
+
+// Function to Accept RemoteStartTransaction
+function AcceptRemoteStartTransaction() {
+    if (isConnected) {
+        const AcceptRemoteStartTransaction = [3,"e385c12c-3e3e-446b-a953-df90b55d95d3",{"status":"Accepted"}];
+        console.log('Sending Acceptance data...', AcceptRemoteStartTransaction);
+        otherServerWebSocket.send(JSON.stringify(AcceptRemoteStartTransaction));
+    }
+}
+
+// Function to resend the BootNotification message
+function resendMessage() {
+    if (isConnected) {
+        console.log('Resending the BootNotification message:', bootNotificationData);
+        otherServerWebSocket.send(JSON.stringify(bootNotificationData));
+    }
+}
+
+// Function to handle the parsed message
+function handleParsedMessage(parsedMessage) {
+    if (parsedMessage[2] && parsedMessage[2].status === 'Accepted') {
+        sendNextData();
+        heartbeatInterval = parseInt(parsedMessage[2].interval);
+        heartbeatSent = false;
+    } else if (parsedMessage[1] && parsedMessage[1] === 'a6gs8797ewYM06' && !heartbeatSent) {
+        sendHeartbeat();
+        heartbeatSent = true;
+        heartbeatInterval = setInterval(() => {
+            sendHeartbeat();
+        }, heartbeatInterval);
+        // Check if the received data contains RemoteStartTransaction
+        if  (parsedMessage[2] && parsedMessage[2] === 'RemoteStartTransaction' && heartbeatSent) {
+            console.log("RemoteStartTransaction")
+            AcceptRemoteStartTransaction();
+        }
+    } else if (!heartbeatSent) {
+        resendMessage();
+    }
+}
+
+// Function to establish WebSocket connection
+function establishWebSocketConnection(data) {
+    otherServerWebSocket = new WebSocket(`ws://192.168.1.70:8050/OCPPJ/${ChargerID}`, ['ocpp1.6'], {
+        headers: {
+            "Upgrade": "websocket",
+            "Connection": "Upgrade",
+            "Sec-WebSocket-Key": "o1lUeTEfR+tPqf+WjaqL9A==",
+            "Sec-WebSocket-Version": "13",
+            "Sec-WebSocket-Protocol": "ocpp1.6",
+        },
+    });
+
+    // Store the WebSocket connection with ChargerID in the clients map
+    clients.set(ChargerID, otherServerWebSocket);
+
+    otherServerWebSocket.on('open', () => {
+        console.log('WebSocket connection established with ChargerID:', ChargerID);
+        isConnected = true;
+    });
+
+    otherServerWebSocket.on('message', (message) => {
+        try {
+            const parsedMessage = JSON.parse(message);
+            console.log('Received from server:', parsedMessage);
+            handleParsedMessage(parsedMessage);
+        } catch (error) {
+            console.error('Error parsing message from other server:', error);
+        }
+    });
+
+    otherServerWebSocket.on('close', () => {
+        console.log('Connection closed unexpectedly.');
+        isConnected = false;
+        // Reconnect after a delay (e.g., 1 second)
+        // setTimeout(() => connectToOtherServer(data), 1000);
+    });
+}
+
+// Function to handle connecting state
+function handleConnectingState(data) {
+    console.warn('WebSocket is still connecting (CONNECTING state)');
+    setTimeout(() => connectToOtherServer(data), 1000); // Retry connection after 1 second
+}
+
+// Function to connect to the other server
+function connectToOtherServer(data, id) {
+    ChargerID = id || ChargerID;
+
+    if (!otherServerWebSocket || otherServerWebSocket.readyState === WebSocket.CLOSED) {
+        establishWebSocketConnection(data);
+    } else if (otherServerWebSocket.readyState === WebSocket.OPEN) {
+        otherServerWebSocket.send(JSON.stringify(data));
+        console.log('Sending data to server:', data);
+
+    } else if (otherServerWebSocket.readyState === WebSocket.CONNECTING) {
+        handleConnectingState(data);
+    }
+}
+
+// Function to close WebSocket connection
+function closeWebSocket(ws) {
+    if (ws) {
+        console.log('Closing WebSocket connection');
+        isConnected = false;
+        clearInterval(heartbeatInterval); // Clear the heartbeat interval
+        ws.close();
+    }
+}
+
+module.exports = {
+    connectToOtherServer,
+    closeWebSocket,
+    findWebSocketByChargerId,
+};
