@@ -1,4 +1,4 @@
-# Charger Simulator
+# EV Charger Simulator
 
 Charger Simulator is a web application designed to simulate various functionalities of an electric vehicle (EV) charging station. It serves as a tool for testing and experimenting with different charging scenarios.
 
